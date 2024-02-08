@@ -6,6 +6,13 @@ from nltk import pos_tag
 from nltk.chunk import ne_chunk
 from collections import Counter
 import gensim
+import nltk
+
+# nltk.download('stopwords')   #Da installare per far funzionare il progetto
+# nltk.download('wordnet')     #Da installare per far funzionare il progetto
+# nltk.download('averaged_perceptron_tagger') #Da installare per far funzionare il progetto
+# nltk.download('maxent_ne_chunker') #Da installare per far funzionare il progetto
+# nltk.download('words') #Da installare per far funzionare il progetto
 
 
 SIZE = 20
@@ -44,14 +51,18 @@ def preprocess_text(text):
 
 
 def analyze_topics(abstracts):
-    preprocessed_abstracts = [preprocess_text(abstract) for abstract in abstracts]
+    preprocessed_abstracts = [preprocess_text(abstract).split(sep=' ') for abstract in abstracts]
 
     # Costruzione di un corpus per l'analisi dei topic
     dictionary = gensim.corpora.Dictionary(preprocessed_abstracts)
-    bow_corpus = [dictionary.doc2bow(abstract) for abstract in preprocessed_abstracts]
+
+    bow_corpus = []
+
+    for abstract in preprocessed_abstracts:
+        bow_corpus.append(dictionary.doc2bow(abstract))
 
     # LDA (Latent Dirichlet Allocation)
-    lda_model = gensim.models.LdaMulticore(bow_corpus, num_topics=5, id2word=dictionary, passes=10, workers=2)
+    lda_model = gensim.models.LdaMulticore(bow_corpus, num_topics=5, id2word=dictionary, passes=10)
 
     # Topic principali
     dominant_topics = []
