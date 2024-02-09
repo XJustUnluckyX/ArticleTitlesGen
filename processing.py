@@ -6,6 +6,7 @@ from nltk import pos_tag
 from nltk.chunk import ne_chunk
 from collections import Counter
 import gensim
+import numpy as np
 import nltk
 
 # nltk.download('stopwords')   #Da installare per far funzionare il progetto
@@ -69,7 +70,7 @@ def analyze_topics(abstracts):
     for abstract_bow in bow_corpus:
         topics = lda_model.get_document_topics(abstract_bow)
         dominant_topic = max(topics, key=lambda x: x[1])
-        dominant_topics.append(dominant_topic)
+        dominant_topics.append(np.array(dominant_topic))
 
     return dominant_topics
 
@@ -87,6 +88,6 @@ def analyze_named_entities(abstracts):
         for subtree in chunked_tokens:
             if hasattr(subtree, 'label'):
                 entity = " ".join([word for word, pos in subtree.leaves()])
-                named_entities.append(entity)
+                named_entities.append(np.array(entity))
 
     return named_entities
