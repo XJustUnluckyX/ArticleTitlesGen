@@ -1,118 +1,160 @@
 import numpy as np
 import pandas as pd
-from keras import Input, Model
-from keras.preprocessing.text import Tokenizer
-from keras.preprocessing.sequence import pad_sequences
-from keras.layers import Embedding, LSTM, Attention, Dense
-import keras as ks
-from processing import preprocess_text
+import torch
+from torch import optim
+from torch.utils.data import DataLoader
+from transformers import BartTokenizer, BartForConditionalGeneration
+from torch.utils.data import Dataset
+import matplotlib.pyplot as plt
+
+TRAIN_BATCH_SIZE = 4
+SUMMARY_LEN = 20
 
 
-def build_encoder_model(vocab_size, max_length, embedding_dim):
-    input_layer = Input(shape=(max_length,))
-    embedding_layer = Embedding(vocab_size, embedding_dim)(input_layer)
-    encoder = LSTM(256, return_state=True)
-    _, state_h, state_c = encoder(embedding_layer)
-    encoder_states = [state_h, state_c]
-    encoder_model = Model(inputs=input_layer, outputs=encoder_states)
-    return encoder_model
+def plot_losses(train_losses, val_losses):
+    plt.plot(train_losses, label='Train Loss')
+    plt.plot(val_losses, label='Val Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Training and Validation Loss')
+    plt.legend()
+    plt.show()
 
 
-def build_decoder_model(vocab_size, latent_dim, encoder_states_shape):
-    decoder_inputs = Input(shape=(None,))
-    decoder_embedding = Embedding(vocab_size, latent_dim)(decoder_inputs)
-    decoder_lstm = LSTM(latent_dim, return_sequences=True, return_state=True)
-    decoder_outputs, state_h, state_c = decoder_lstm(decoder_embedding, initial_state=encoder_states_shape)
+class CustomDataset(Dataset):
+    def __init__(self, abstracts, titles, tokenizer, max_length):
+        self.abstracts = abstracts
+        self.titles = titles
+        self.tokenizer = tokenizer
+        self.max_length = max_length
 
-    attention_layer = Attention()
-    context_vector = attention_layer([decoder_outputs, encoder_states_shape[0]])
-    decoder_combined_context = ks.layers.concatenate([context_vector, decoder_outputs])
-    decoder_dense = Dense(vocab_size, activation='softmax')
-    decoder_outputs = decoder_dense(decoder_combined_context)
+    def __len__(self):
+        return len(self.abstracts)
 
-    decoder_model = Model(inputs=[decoder_inputs] + encoder_states_shape, outputs=[decoder_outputs, state_h, state_c])
-    return decoder_model
+    def __getitem__(self, idx):
+        print(f"Accessing index: {idx}")
+        abstract = str(self.abstracts[idx])
+        title = str(self.titles[idx])
 
+        inputs = self.tokenizer.encode_plus(
+            abstract,
+            max_length=self.max_length,
+            padding='max_length',
+            truncation=True,
+            return_tensors='pt'
+        )
+        labels = self.tokenizer.encode(
+            title,
+            max_length=self.max_length,
+            padding='max_length',
+            truncation=True,
+            return_tensors='pt'
+        )
 
-def generate_title(encoder_model, decoder_model, input_sequence, title_tokenizer, max_title_length):
-    states_value = encoder_model.predict(input_sequence[:, 0, :])
-
-    target_seq = np.zeros((1, 1))
-
-    target_seq[0, 0] = title_tokenizer.word_index['<start>']
-
-    decoded_title = ''
-    stop_condition = False
-    while not stop_condition:
-        output_tokens, h, c = decoder_model.predict([target_seq] + states_value)
-
-        sampled_token_index = np.argmax(output_tokens[0, -1, :])
-        sampled_word = None
-        for word, index in title_tokenizer.word_index.items():
-            if index == sampled_token_index:
-                sampled_word = word
-                break
-        if sampled_word is None:
-            continue
-
-        decoded_title += ' ' + sampled_word
-
-        if sampled_word == '<end>' or len(decoded_title.split()) > max_title_length:
-            stop_condition = True
-
-        target_seq = np.zeros((1, 1))
-        target_seq[0, 0] = sampled_token_index
-
-        states_value = [h, c]
-
-    return decoded_title.strip()
+        return {
+            'input_ids': inputs['input_ids'].flatten(),
+            'attention_mask': inputs['attention_mask'].flatten(),
+            'labels': labels.flatten()
+        }
 
 
 def main():
     path = "C:/Users/Xzeni/Downloads/dataset1.csv"
     df = pd.read_csv(path, sep=',', quotechar='"')
     df = df.drop(df.columns[0], axis=1)
-    df = df.head(10000)
-    abstracts = df["abstracts"].values
-    titles = df["titles"].values
+    df1 = df.head(200)
 
-    abstracts = [preprocess_text(a) for a in abstracts]
-    titles = [preprocess_text(t) for t in titles]
+    tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
+    tokenizer.bos_token = tokenizer.cls_token
+    tokenizer.eos_token = tokenizer.sep_token
 
-    abstract_tokenizer = Tokenizer()
-    abstract_tokenizer.fit_on_texts(abstracts)
+    bart_shared = BartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
 
-    abstract_sequences = abstract_tokenizer.texts_to_sequences(abstracts)
+    bart_shared.config.decoder_start_token_id = tokenizer.bos_token_id
+    bart_shared.config.eos_token_id = tokenizer.eos_token_id
+    bart_shared.config.pad_token_id = tokenizer.pad_token_id
+    batch_size = TRAIN_BATCH_SIZE
 
-    title_tokenizer = Tokenizer(oov_token=None)
-    title_tokenizer.fit_on_texts(titles)
+    generation_params = {
+        'max_length': SUMMARY_LEN,
+        'min_length': 15,
+        'early_stopping': True
+    }
 
-    title_tokenizer.word_index['<start>'] = len(title_tokenizer.word_index) + 1
-    title_tokenizer.word_index['<end>'] = len(title_tokenizer.word_index) + 2
+    train_dataset = CustomDataset(abstracts=df1["abstracts"], titles=df1["titles"], tokenizer=tokenizer,
+                                  max_length=512)
 
-    title_sequences = title_tokenizer.texts_to_sequences(titles)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-    max_abstract_length = max([len(seq) for seq in abstract_sequences])
-    max_title_length = max([len(seq) for seq in title_sequences])
+    val_dataset = CustomDataset(abstracts=df1["abstracts"], titles=df1["titles"], tokenizer=tokenizer,
+                                max_length=512)
 
-    abstract_vocab_size = len(abstract_tokenizer.word_index) + 1
-    title_vocab_size = len(title_tokenizer.word_index) + 1
+    val_loader = DataLoader(val_dataset, batch_size=batch_size)
 
-    padded_abstract_sequences = []
+    learning_rate = 3e-5
+    num_epochs = 10
+    optimizer = optim.AdamW(bart_shared.parameters(), lr=learning_rate)
+    best_val_loss = np.inf
+    early_stop_count = 0
+    early_stop_patience = 2
 
-    for a in abstract_sequences:
-        padded_abstract_sequences.append(pad_sequences([a], maxlen=max_abstract_length, padding='post'))
+    train_losses = []
+    val_losses = []
 
-    encoder_model = build_encoder_model(abstract_vocab_size, max_abstract_length, 100)
-    decoder_model = build_decoder_model(title_vocab_size, 256, [Input(shape=(256,)), Input(shape=(256,))])
+    for epoch in range(num_epochs):
+        bart_shared.train()
+        total_loss = 0
 
-    # Addestramento
+        for step, batch in enumerate(train_loader):
+            input_ids = batch["input_ids"]
+            attention_mask = batch["attention_mask"]
+            labels = batch["labels"]
 
-    input_seq_index = 1
-    input_sequence = np.array([padded_abstract_sequences[input_seq_index]])
-    generated_title = generate_title(encoder_model, decoder_model, input_sequence, title_tokenizer, max_title_length)
-    print("Generated Title:", generated_title)
-    print("Original Title:", titles[1])
+            optimizer.zero_grad()
+
+            outputs = bart_shared(input_ids=input_ids, attention_mask=attention_mask, labels=labels,
+                                  **generation_params)
+            loss = outputs.loss
+
+            loss.backward()
+            optimizer.step()
+
+            total_loss += loss.item()
+
+        avg_train_loss = total_loss / len(train_loader)
+
+        bart_shared.eval()
+        val_loss = 0
+
+        with torch.no_grad():
+            for batch in val_loader:
+                input_ids = batch["input_ids"]
+                attention_mask = batch["attention_mask"]
+                labels = batch["labels"]
+
+                outputs = bart_shared(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+                loss = outputs.loss
+                val_loss += loss.item()
+
+        avg_val_loss = val_loss / len(val_loader)
+
+        train_losses.append(avg_train_loss)
+        val_losses.append(avg_val_loss)
+
+        print(f"Epoch {epoch + 1}/{num_epochs}, Train Loss: {avg_train_loss}, Val Loss: {avg_val_loss}")
+
+        if avg_val_loss < best_val_loss:
+            best_val_loss = avg_val_loss
+            early_stop_count = 0
+            torch.save(bart_shared.state_dict(), "best_model.pt")
+        else:
+            early_stop_count += 1
+
+        if early_stop_count >= early_stop_patience:
+            print("Early stopping triggered.")
+            break
+
+    plot_losses(train_losses, val_losses)
 
 
 if __name__ == "__main__":

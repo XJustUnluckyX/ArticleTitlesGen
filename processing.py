@@ -19,14 +19,13 @@ import nltk
 SIZE = 20
 
 
-def most_common_words(abstracts):
+def most_common_words(text):
     title_words_counter = Counter()
 
-    for abstract in abstracts:
-        words = re.findall(r'\b\w+\b', abstract)
-        title_words_counter.update(words)
+    words = re.findall(r'\b\w+\b', text)
+    title_words_counter.update(words)
 
-    most_common_title_words = title_words_counter.most_common(SIZE)
+    most_common_title_words = [word for word, _ in title_words_counter.most_common(SIZE)]
     return most_common_title_words
 
 
@@ -45,49 +44,49 @@ def preprocess_text(text):
     lemmatizer = WordNetLemmatizer()
     lemmatized_tokens = [lemmatizer.lemmatize(word) for word in filtered_tokens]
 
-    # Ricostruzione
     preprocessed_text = ' '.join(lemmatized_tokens)
 
     return preprocessed_text
 
 
-def analyze_topics(abstracts):
-    preprocessed_abstracts = [preprocess_text(abstract).split(sep=' ') for abstract in abstracts]
+def analyze_topics(text):
+    preprocessed_text = preprocess_text(text)
+    tokens = preprocessed_text.split()
 
     # Costruzione di un corpus per l'analisi dei topic
-    dictionary = gensim.corpora.Dictionary(preprocessed_abstracts)
+    dictionary = gensim.corpora.Dictionary([tokens])
 
-    bow_corpus = []
-
-    for abstract in preprocessed_abstracts:
-        bow_corpus.append(dictionary.doc2bow(abstract))
+    bow_text = [dictionary.doc2bow(tokens)]
 
     # LDA (Latent Dirichlet Allocation)
-    lda_model = gensim.models.LdaMulticore(bow_corpus, num_topics=5, id2word=dictionary, passes=10)
+    lda_model = gensim.models.LdaMulticore(bow_text, num_topics=3, id2word=dictionary, passes=10)
 
-    # Topic principali
+    topic_words = {}
+    for i, topic in lda_model.show_topics(formatted=False):
+        topic_words[i] = [word for word, _ in topic]
+
     dominant_topics = []
-    for abstract_bow in bow_corpus:
-        topics = lda_model.get_document_topics(abstract_bow)
-        dominant_topic = max(topics, key=lambda x: x[1])
-        dominant_topics.append(np.array(dominant_topic))
+    for text_bow in bow_text:
+        topics = lda_model.get_document_topics(text_bow)
+        dominant_topic = max(topics, key=lambda x: x[1])[0]
+        dominant_topics.append(topic_words[dominant_topic])
 
-    return dominant_topics
+    return [word for sublist in dominant_topics for word in sublist]
 
 
-def analyze_named_entities(abstracts):
+def analyze_named_entities(text):
     named_entities = []
-    for abstract in abstracts:
-        # Tokenizzazione e tagging POS (Part of Speech)
-        tokens = word_tokenize(abstract)
-        tagged_tokens = pos_tag(tokens)
 
-        # Estrazione delle Named Entities
-        chunked_tokens = ne_chunk(tagged_tokens)
+    # Tokenizzazione e tagging POS (Part of Speech)
+    tokens = word_tokenize(text)
+    tagged_tokens = pos_tag(tokens)
 
-        for subtree in chunked_tokens:
-            if hasattr(subtree, 'label'):
-                entity = " ".join([word for word, pos in subtree.leaves()])
-                named_entities.append(np.array(entity))
+    # Estrazione delle Named Entities
+    chunked_tokens = ne_chunk(tagged_tokens)
+
+    for subtree in chunked_tokens:
+        if hasattr(subtree, 'label'):
+            entity = " ".join([word for word, pos in subtree.leaves()])
+            named_entities.append(entity)
 
     return named_entities
