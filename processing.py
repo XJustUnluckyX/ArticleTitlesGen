@@ -58,6 +58,9 @@ def analyze_topics(text):
 
     bow_text = [dictionary.doc2bow(tokens)]
 
+    #Se il dizionario è vuoto restituiamo una lista vuota
+    if len(dictionary) == 0:
+        return []
     # LDA (Latent Dirichlet Allocation)
     lda_model = gensim.models.LdaMulticore(bow_text, num_topics=3, id2word=dictionary, passes=10)
 
