@@ -21,7 +21,7 @@ def plot_losses(train_losses, val_losses):
     plt.show()
 
 
-class CustomDataset(Dataset):
+class CustomDatasetBart(Dataset):
     def __init__(self, abstracts, titles, tokenizer, max_length):
         self.abstracts = abstracts
         self.titles = titles
@@ -81,12 +81,12 @@ def main():
         'early_stopping': True
     }
 
-    train_dataset = CustomDataset(abstracts=df1["abstracts"], titles=df1["titles"], tokenizer=tokenizer,
+    train_dataset = CustomDatasetBart(abstracts=df1["abstracts"], titles=df1["titles"], tokenizer=tokenizer,
                                   max_length=512)
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-    val_dataset = CustomDataset(abstracts=df1["abstracts"], titles=df1["titles"], tokenizer=tokenizer,
+    val_dataset = CustomDatasetBart(abstracts=df1["abstracts"], titles=df1["titles"], tokenizer=tokenizer,
                                 max_length=512)
 
     val_loader = DataLoader(val_dataset, batch_size=batch_size)
@@ -112,8 +112,8 @@ def main():
 
             optimizer.zero_grad()
 
-            outputs = bart_shared(input_ids=input_ids, attention_mask=attention_mask, labels=labels,
-                                  **generation_params)
+            outputs = bart_shared(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+
             loss = outputs.loss
 
             loss.backward()
@@ -130,9 +130,8 @@ def main():
             for batch in val_loader:
                 input_ids = batch["input_ids"]
                 attention_mask = batch["attention_mask"]
-                labels = batch["labels"]
 
-                outputs = bart_shared(input_ids=input_ids, attention_mask=attention_mask, labels=labels)
+                outputs = bart_shared.generate(input_ids=input_ids, attention_mask=attention_mask, **generation_params)
                 loss = outputs.loss
                 val_loss += loss.item()
 

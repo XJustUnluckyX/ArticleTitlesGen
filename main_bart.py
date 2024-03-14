@@ -2,7 +2,7 @@ import pandas as pd
 import torch
 from torch.utils.data import DataLoader
 from transformers import BartTokenizer, BartForConditionalGeneration
-from model import CustomDataset
+from model_bart import CustomDatasetBart
 from processing import analyze_topics, analyze_named_entities, most_common_words
 
 SUMMARY_LEN = 20
@@ -37,7 +37,7 @@ def test_best_model():
         'early_stopping': True
     }
 
-    test_dataset = CustomDataset(abstracts=df_test["abstracts"], titles=df_test["titles"], tokenizer=tokenizer,
+    test_dataset = CustomDatasetBart(abstracts=df_test["abstracts"], titles=df_test["titles"], tokenizer=tokenizer,
                                  max_length=512)
 
     test_loader = DataLoader(test_dataset, batch_size=1)
