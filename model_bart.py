@@ -75,31 +75,19 @@ def main():
     bart_shared.config.pad_token_id = tokenizer.pad_token_id
     batch_size = TRAIN_BATCH_SIZE
 
-    generation_params = {
-        'max_length': SUMMARY_LEN,
-        'min_length': 15,
-        'early_stopping': True
-    }
-
     train_dataset = CustomDatasetBart(abstracts=df1["abstracts"], titles=df1["titles"], tokenizer=tokenizer,
                                   max_length=512)
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
-    val_dataset = CustomDatasetBart(abstracts=df1["abstracts"], titles=df1["titles"], tokenizer=tokenizer,
-                                max_length=512)
-
-    val_loader = DataLoader(val_dataset, batch_size=batch_size)
-
     learning_rate = 3e-5
     num_epochs = 10
     optimizer = optim.AdamW(bart_shared.parameters(), lr=learning_rate)
-    best_val_loss = np.inf
+    best_train_loss = np.inf
     early_stop_count = 0
     early_stop_patience = 2
 
     train_losses = []
-    val_losses = []
 
     for epoch in range(num_epochs):
         bart_shared.train()
@@ -124,26 +112,13 @@ def main():
         avg_train_loss = total_loss / len(train_loader)
 
         bart_shared.eval()
-        val_loss = 0
-
-        with torch.no_grad():
-            for batch in val_loader:
-                input_ids = batch["input_ids"]
-                attention_mask = batch["attention_mask"]
-
-                outputs = bart_shared.generate(input_ids=input_ids, attention_mask=attention_mask, **generation_params)
-                loss = outputs.loss
-                val_loss += loss.item()
-
-        avg_val_loss = val_loss / len(val_loader)
 
         train_losses.append(avg_train_loss)
-        val_losses.append(avg_val_loss)
 
-        print(f"Epoch {epoch + 1}/{num_epochs}, Train Loss: {avg_train_loss}, Val Loss: {avg_val_loss}")
+        print(f"Epoch {epoch + 1}/{num_epochs}, Train Loss: {avg_train_loss}")
 
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
+        if avg_train_loss < best_train_loss:
+            best_train_loss = avg_train_loss
             early_stop_count = 0
             torch.save(bart_shared.state_dict(), "best_model.pt")
         else:
@@ -153,7 +128,7 @@ def main():
             print("Early stopping triggered.")
             break
 
-    plot_losses(train_losses, val_losses)
+    plot_losses(train_losses)
 
 
 if __name__ == "__main__":
