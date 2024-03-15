@@ -56,7 +56,7 @@ def main():
     print(trainer_t5.state.log_history)
     trainer_t5.save_model("finetuned_T5")
 
-    pipe_t5 = pipeline("text2text-generation", model="fine_tuned_T5", tokenizer=tokenizer_t5)
+    pipe_t5 = pipeline("text2text-generation", model="finetuned_T5", tokenizer=tokenizer_t5)
     # pipe_base = pipeline("text2text-generation", model=model_base, tokenizer=tokenizer_t5)
     gen_parameters_t5 = {"length_penalty": 0.8, "num_beams": 8, "max_length": 20}
 
