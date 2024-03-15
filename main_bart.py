@@ -15,10 +15,11 @@ def calculate_intersection_percentage(abstract_keywords, title_keywords):
 
 
 def test_best_model():
+    # C:/Users/Utente/Desktop/IA/datasets/dataset1.csv
     path = "C:/Users/Xzeni/Downloads/dataset1.csv"
     df = pd.read_csv(path, sep=',', quotechar='"')
     df = df.drop(df.columns[0], axis=1)
-    df_test = df.tail(10)
+    df_test = df.tail(50)
 
     df_test = df_test.reset_index()
 

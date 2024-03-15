@@ -11,12 +11,11 @@ TRAIN_BATCH_SIZE = 4
 SUMMARY_LEN = 20
 
 
-def plot_losses(train_losses, val_losses):
+def plot_losses(train_losses):
     plt.plot(train_losses, label='Train Loss')
-    plt.plot(val_losses, label='Val Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
-    plt.title('Training and Validation Loss')
+    plt.title('Training Loss')
     plt.legend()
     plt.show()
 
@@ -59,6 +58,7 @@ class CustomDatasetBart(Dataset):
 
 
 def main():
+    # C:/Users/Utente/Desktop/IA/datasets/dataset1.csv
     path = "C:/Users/Xzeni/Downloads/dataset1.csv"
     df = pd.read_csv(path, sep=',', quotechar='"')
     df = df.drop(df.columns[0], axis=1)
